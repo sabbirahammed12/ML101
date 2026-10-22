@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RT-Track</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#141414;
+  --white:#ffffff;
+  --paper:#f0f0f0;
+  --mute:#c8c8c8;
+  --rule:#dcdcdc;
+  --azure:#f0ffff;
+
+  --glass:rgba(255,255,255,.04);
+  --glass-hi:rgba(255,255,255,.16);
+  --edge:rgba(255,255,255,.16);
+  --edge-soft:rgba(255,255,255,.08);
+  /* the inner top highlight is what sells a pane as glass rather than card */
+  --lift:inset 0 1px 0 rgba(255,255,255,.22),0 18px 44px rgba(0,0,0,.5);
+
+  --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--ink);color:var(--paper);
+  font-family:var(--sans);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+/* depth behind the glass -- without this the panels read as flat grey */
+body::before,body::after{
+  content:"";position:fixed;border-radius:50%;filter:blur(90px);z-index:0;
+  pointer-events:none;
+}
+/* Positioned to sit *behind* the panels, not in the corners -- glass only
+   looks like glass when there is something underneath it to diffuse. */
+body::before{
+  width:62vw;height:62vw;left:-6vw;top:-24vw;
+  background:radial-gradient(circle,rgba(240,255,255,.34),transparent 64%);
+}
+body::after{
+  width:54vw;height:54vw;right:-8vw;top:28vh;
+  background:radial-gradient(circle,rgba(255,255,255,.20),transparent 64%);
+}
+.wrap{position:relative;z-index:1;max-width:1480px;margin:0 auto;padding:22px 16px 40px}
+
+/* ---------------------------------------------------------------- header */
+header{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:14px 18px;margin-bottom:16px;border-radius:16px;
+  background:linear-gradient(158deg,var(--glass-hi),var(--glass));
+  backdrop-filter:blur(26px) saturate(150%);
+  -webkit-backdrop-filter:blur(26px) saturate(150%);
+  border:1px solid var(--edge);box-shadow:var(--lift);
+}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+.brand h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.01em}
+.brand span{color:var(--mute);font-size:13px}
+
+.status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mute);flex:none}
+.dot.on{background:var(--azure);box-shadow:0 0 0 4px rgba(240,255,255,.14)}
+.dot.on.pulse{animation:breathe 2.4s ease-in-out infinite}
+@keyframes breathe{50%{box-shadow:0 0 0 9px rgba(240,255,255,0)}}
+
+/* ---------------------------------------------------------------- controls */
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+select,input[type=number]{
+  font:inherit;font-size:14px;color:var(--paper);
+  background:rgba(255,255,255,.07);border:1px solid var(--edge);
+  border-radius:10px;padding:8px 11px;min-width:0;
+}
+select option{background:#1b1b1b;color:var(--paper)}
+label.check{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mute);cursor:pointer}
+input[type=checkbox]{accent-color:var(--azure);width:15px;height:15px}
+button{
+  font:inherit;font-weight:500;font-size:14px;cursor:pointer;
+  padding:8px 18px;border-radius:10px;color:var(--ink);
+  background:var(--paper);border:1px solid transparent;transition:background .15s;
+}
+button:hover{background:var(--white)}
+button.ghost{background:rgba(255,255,255,.07);color:var(--paper);border-color:var(--edge)}
+button.ghost:hover{background:rgba(255,255,255,.13)}
+button:disabled{opacity:.4;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
+
+/* ---------------------------------------------------------------- layout */
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.panel{
+  border-radius:16px;border:1px solid var(--edge);
+  background:linear-gradient(158deg,var(--glass-hi),var(--glass));
+  backdrop-filter:blur(26px) saturate(150%);
+  -webkit-backdrop-filter:blur(26px) saturate(150%);
+  box-shadow:var(--lift);
+}
+.panel h2{
+  margin:0;padding:13px 17px;font-size:13px;font-weight:600;color:var(--mute);
+  border-bottom:1px solid var(--edge-soft);
+}
+
+/* ------------------------------------------------------------------ video */
+.stage{padding:10px}
+.stage figure{margin:0;border-radius:11px;overflow:hidden;background:#0d0d0d;
+  border:1px solid var(--edge-soft);line-height:0}
+/* A 4:3 clip would otherwise tower over the telemetry beside it. */
+.stage img{width:100%;display:block;max-height:min(68vh,660px);object-fit:contain;
+  background:#0d0d0d}
+
+/* --------------------------------------------------------------- readouts */
+.readouts{padding:6px 17px 15px}
+.read{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:9px 0;border-bottom:1px solid var(--edge-soft)}
+.read:last-child{border-bottom:0}
+.read dt{color:var(--mute);font-size:13px}
+.read dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:14px;color:var(--paper)}
+.hero-read{padding:16px 17px 13px;border-bottom:1px solid var(--edge-soft)}
+.hero-read .v{font-family:var(--mono);font-size:44px;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.hero-read .u{color:var(--mute);font-size:13px;margin-top:6px}
+.azure{color:var(--azure)}
+
+/* ----------------------------------------------------------------- tables */
+.lower{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,420px);gap:16px;
+  margin-top:16px;align-items:start}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{
+  text-align:left;font-weight:500;color:var(--mute);font-size:12px;
+  padding:9px 17px;border-bottom:1px solid var(--edge-soft);position:sticky;top:0;
+  background:rgba(20,20,20,.72);backdrop-filter:blur(8px)
+}
+tbody td{padding:8px 17px;border-bottom:1px solid rgba(255,255,255,.045)}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--mute)}
+td.id{font-family:var(--mono);color:var(--paper)}
+.swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:8px;
+  vertical-align:baseline}
+.scroll{max-height:306px;overflow:auto}
+.pill{display:inline-block;margin-top:9px;font-size:12px;padding:3px 10px;border-radius:999px;
+  color:var(--ink);background:var(--azure);font-weight:500}
+.empty{padding:26px 17px;color:var(--mute);font-size:13px}
+canvas{display:block;width:100%;height:306px}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px;padding:13px 17px 0}
+.chip{font-size:12px;color:var(--paper);background:rgba(255,255,255,.07);
+  border:1px solid var(--edge-soft);border-radius:999px;padding:4px 11px}
+.chip b{font-family:var(--mono);font-weight:500;color:var(--azure)}
+
+.err{margin-top:14px;padding:12px 16px;border-radius:12px;font-size:14px;
+  border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08)}
+
+@media (max-width:1080px){
+  .grid,.lower{grid-template-columns:minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1>RT-Track</h1>
+      <span>real-time object tracking</span>
+    </div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">idle</span></div>
+    <div class="controls">
+      <select id="source" aria-label="Video source"></select>
+      <select id="imgsz" aria-label="Detector size">
+        <option value="416" selected>416 px — faster</option>
+        <option value="640">640 px — sees smaller objects</option>
+      </select>
+      <select id="conf" aria-label="Confidence threshold">
+        <option value="0.25">keep uncertain guesses</option>
+        <option value="0.40" selected>balanced</option>
+        <option value="0.55">only confident ones</option>
+      </select>
+      <label class="check"><input type="checkbox" id="loop" checked> loop</label>
+      <button id="startBtn">Start tracking</button>
+      <button id="stopBtn" class="ghost" disabled>Stop</button>
+    </div>
+  </header>
+
+  <div id="error" class="err" hidden></div>
+
+  <div class="grid">
+    <section class="panel stage" aria-label="Tracking view">
+      <figure><img id="stream" src="/stream.mjpg" alt="Live tracking view"></figure>
+    </section>
+
+    <aside class="panel" aria-label="Telemetry">
+      <div class="hero-read">
+        <div class="v" id="fps">—</div>
+        <div class="u">frames per second · <span id="rt">—</span>× video speed</div>
+        <span class="pill" id="pill" hidden>keeping up with the video</span>
+      </div>
+      <dl class="readouts">
+        <div class="read"><dt>Objects now</dt><dd id="activeN">0</dd></div>
+        <div class="read"><dt>Seen in total</dt><dd id="uniqueN">0</dd></div>
+        <div class="read"><dt>Video frame</dt><dd id="frame">0</dd></div>
+        <div class="read"><dt>Frames processed</dt><dd id="processed">0</dd></div>
+        <div class="read"><dt>Detector</dt><dd id="detector">—</dd></div>
+        <div class="read"><dt>Runs every</dt><dd id="interval">—</dd></div>
+        <div class="read"><dt>Detection</dt><dd id="detms">—</dd></div>
+        <div class="read"><dt>Flow + Kalman</dt><dd id="trkms">—</dd></div>
+        <div class="read"><dt>Resolution</dt><dd id="res">—</dd></div>
+      </dl>
+    </aside>
+  </div>
+
+  <div class="lower">
+    <section class="panel" aria-label="Objects being tracked">
+      <h2>Objects being tracked</h2>
+      <div class="chips" id="chips"></div>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th>ID</th><th>Class</th><th>Position</th><th>Size</th>
+            <th>Speed</th><th>Conf</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="empty" id="emptyRow">Nothing tracked yet. Pick a video and press Start tracking.</div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Paths travelled">
+      <h2>Paths travelled</h2>
+      <canvas id="map" width="840" height="612"></canvas>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let polling = null;
+
+function colourFor(id){                 // matches the overlay colours
+  return `hsl(${(id*47)%180*2}deg 62% 62%)`;
+}
+
+async function loadSources(){
+  const r = await fetch('/api/sources').then(r=>r.json());
+  const sel = $('source');
+  sel.innerHTML = '';
+  r.videos.forEach(v=>{
+    const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o);
+  });
+  const cam=document.createElement('option');
+  cam.value='0'; cam.textContent='webcam';
+  sel.appendChild(cam);
+  if(!r.videos.length) showError('No videos found. Run: python download_videos.py');
+}
+
+function showError(msg){
+  const e=$('error');
+  if(!msg){e.hidden=true;return;}
+  e.textContent=msg; e.hidden=false;
+}
+
+async function start(){
+  showError('');
+  const body={source:$('source').value, imgsz:+$('imgsz').value,
+              conf:+$('conf').value, loop:$('loop').checked};
+  const r=await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)});
+  const j=await r.json();
+  if(j.error){showError(j.error);return;}
+  $('startBtn').disabled=true; $('stopBtn').disabled=false;
+}
+
+async function stop(){
+  await fetch('/api/stop',{method:'POST'});
+  $('startBtn').disabled=false; $('stopBtn').disabled=true;
+}
+
+function fmt(n,d=1){return (n===undefined||n===null)?'—':Number(n).toFixed(d);}
+
+async function poll(){
+  let s;
+  try{ s = await fetch('/api/stats').then(r=>r.json()); }catch(e){ return; }
+
+  if(s.error){ showError(s.error); $('startBtn').disabled=false; $('stopBtn').disabled=true; }
+
+  $('dot').className = 'dot' + (s.running?' on pulse':(s.finished?' on':''));
+  $('statusText').textContent = s.running ? `tracking ${s.source}`
+    : (s.finished ? 'finished' : 'idle');
+
+  $('fps').textContent = s.fps ? fmt(s.fps,1) : '—';
+  $('fps').className = 'v' + (s.realtime>=1 ? ' azure' : '');
+  $('pill').hidden = !(s.running && s.realtime>=1);
+  $('rt').textContent = s.realtime ? fmt(s.realtime,2) : '—';
+  $('activeN').textContent = (s.active||[]).length;
+  $('uniqueN').textContent = s.unique_tracks||0;
+  $('frame').textContent = s.total_frames ? `${s.frame} / ${s.total_frames}` : (s.frame||0);
+  $('processed').textContent = (s.processed||0) +
+      (s.loops ? `  (${s.loops+1} passes)` : '');
+  $('detector').textContent = s.detector || '—';
+  $('interval').textContent = s.detect_interval ?
+      (s.detect_interval===1?'every frame':`every ${s.detect_interval} frames`) : '—';
+  $('detms').textContent = s.detector_ms ? `${fmt(s.detector_ms,1)} ms` : '—';
+  $('trkms').textContent = (s.flow_ms||s.tracker_ms) ?
+      `${fmt((s.flow_ms||0)+(s.tracker_ms||0),2)} ms` : '—';
+  $('res').textContent = s.width ? `${s.width} × ${s.height}` : '—';
+
+  const rows=$('rows'), active=s.active||[];
+  rows.innerHTML = active.map(a=>`<tr>
+      <td class="id"><span class="swatch" style="background:${colourFor(a.id)}"></span>${a.id}</td>
+      <td>${a.cls}</td>
+      <td class="num">${a.x}, ${a.y}</td>
+      <td class="num">${a.w}×${a.h}</td>
+      <td class="num">${a.speed} px/f</td>
+      <td class="num">${a.conf}</td>
+    </tr>`).join('');
+  $('emptyRow').hidden = active.length>0;
+  $('emptyRow').textContent = s.running
+    ? 'Confirming tracks — an object has to be seen a few times before it gets an ID.'
+    : 'Nothing tracked yet. Pick a video and press Start tracking.';
+
+  $('chips').innerHTML = Object.entries(s.class_counts||{})
+      .map(([k,v])=>`<span class="chip">${k} <b>${v}</b></span>`).join('');
+
+  if(!s.running && !s.finished) { $('startBtn').disabled=false; $('stopBtn').disabled=true; }
+  if(s.finished){ $('startBtn').disabled=false; $('stopBtn').disabled=true; }
+}
+
+async function drawMap(){
+  let d;
+  try{ d = await fetch('/api/trajectories').then(r=>r.json()); }catch(e){ return; }
+  const c=$('map'), ctx=c.getContext('2d');
+  const W=c.width, H=c.height;
+  ctx.clearRect(0,0,W,H);
+
+  if(!d.width){ return; }
+  const sx = W/d.width, sy = H/d.height;
+
+  ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.lineWidth=1;
+  for(let i=1;i<4;i++){
+    ctx.beginPath(); ctx.moveTo(0,H*i/4); ctx.lineTo(W,H*i/4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W*i/4,0); ctx.lineTo(W*i/4,H); ctx.stroke();
+  }
+
+  ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+  for(const [id,path] of Object.entries(d.paths||{})){
+    if(path.length<2) continue;
+    ctx.strokeStyle=colourFor(+id);
+    ctx.globalAlpha=.85;
+    ctx.beginPath();
+    path.forEach((p,i)=> i? ctx.lineTo(p[0]*sx,p[1]*sy) : ctx.moveTo(p[0]*sx,p[1]*sy));
+    ctx.stroke();
+    const last=path[path.length-1];
+    ctx.globalAlpha=1; ctx.fillStyle=colourFor(+id);
+    ctx.beginPath(); ctx.arc(last[0]*sx,last[1]*sy,3.5,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+$('startBtn').onclick=start;
+$('stopBtn').onclick=stop;
+loadSources();
+poll(); drawMap();
+setInterval(poll,500);
+setInterval(drawMap,900);
+</script>
+</body>
+</html>
